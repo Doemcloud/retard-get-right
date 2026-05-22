@@ -1,0 +1,242 @@
+<!-- ═══════════════════════════════════════════════════════════
+     LOCAL WAZUH RULES
+     Покрывает: OWASP Top 10, Suricata, Samba AD, MinIO, FIM
+     ═══════════════════════════════════════════════════════════ -->
+<group name="local,security">
+
+  <!-- ─────────────────────────────────────
+       OWASP A01 — Broken Access Control
+  ───────────────────────────────────── -->
+  <rule id="100001" level="10">
+    <if_group>web|nginx</if_group>
+    <url>\.\.\/|\.\.\\|%2e%2e%2f|%2e%2e\/|\.\.%2f|%2e%2e%5c</url>
+    <description>OWASP A01: Path Traversal attempt detected</description>
+    <mitre>
+      <id>T1083</id>
+    </mitre>
+    <group>owasp,path_traversal,attack</group>
+  </rule>
+
+  <rule id="100002" level="10">
+    <if_group>web|nginx</if_group>
+    <url>/admin|/administrator|/wp-admin|/phpmyadmin|/manager/html</url>
+    <status>403</status>
+    <description>OWASP A01: Unauthorized access to admin panel</description>
+    <group>owasp,access_control,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A02 — Cryptographic Failures
+  ───────────────────────────────────── -->
+  <rule id="100010" level="8">
+    <if_group>web|nginx</if_group>
+    <match>SSLv2|SSLv3|TLSv1\.0|TLSv1\.1</match>
+    <description>OWASP A02: Weak SSL/TLS protocol detected</description>
+    <group>owasp,crypto,weak_tls</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A03 — Injection (SQLi, CMDi, LDAPi)
+  ───────────────────────────────────── -->
+  <rule id="100020" level="12">
+    <if_group>web|nginx|modsecurity</if_group>
+    <url>union.*select|select.*from|insert.*into|drop.*table|exec.*xp_|1=1|or.*1=1|'.*or.*'|--.*$</url>
+    <description>OWASP A03: SQL Injection attempt detected</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>owasp,sqli,attack</group>
+  </rule>
+
+  <rule id="100021" level="12">
+    <if_group>web|nginx</if_group>
+    <url>;.*cat|;.*ls|;.*id|;.*whoami|\|.*cat|\|.*ls|\`.*\`|\$\(.*\)</url>
+    <description>OWASP A03: Command Injection attempt detected</description>
+    <mitre>
+      <id>T1059</id>
+    </mitre>
+    <group>owasp,cmdi,attack</group>
+  </rule>
+
+  <rule id="100022" level="10">
+    <if_group>web|nginx</if_group>
+    <url>\*\)\(|\)\(|\(\||\|\(|%28%7c|%7c%28</url>
+    <description>OWASP A03: LDAP Injection attempt detected</description>
+    <group>owasp,ldapi,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A04 — Insecure Design (Mass Assignment)
+  ───────────────────────────────────── -->
+  <rule id="100030" level="8">
+    <if_group>web|nginx</if_group>
+    <match>isAdmin|is_admin|role=admin|privilege=|__proto__|constructor\[prototype\]</match>
+    <description>OWASP A04: Mass assignment / prototype pollution attempt</description>
+    <group>owasp,insecure_design,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A05 — Security Misconfiguration
+  ───────────────────────────────────── -->
+  <rule id="100040" level="9">
+    <if_group>web|nginx</if_group>
+    <url>/\.git|/\.env|/\.htaccess|/web\.config|/config\.php|/database\.yml</url>
+    <description>OWASP A05: Sensitive file exposure attempt</description>
+    <group>owasp,misconfiguration,attack</group>
+  </rule>
+
+  <rule id="100041" level="7">
+    <if_group>web|nginx</if_group>
+    <match>X-Powered-By|Server: Apache|Server: nginx|X-AspNet-Version</match>
+    <description>OWASP A05: Server version disclosure in response</description>
+    <group>owasp,misconfiguration,info_disclosure</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A06 — Vulnerable Components
+  ───────────────────────────────────── -->
+  <rule id="100050" level="10">
+    <if_group>vulnerability-detector</if_group>
+    <field name="vulnerability.severity">Critical|High</field>
+    <description>OWASP A06: Critical/High vulnerability detected in component</description>
+    <group>owasp,vulnerable_components,vulnerability</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A07 — Auth Failures (Brute Force)
+  ───────────────────────────────────── -->
+  <rule id="100060" level="10" frequency="5" timeframe="60">
+    <if_matched_sid>5503</if_matched_sid>
+    <description>OWASP A07: Multiple authentication failures - possible brute force</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>owasp,auth_failure,brute_force</group>
+  </rule>
+
+  <rule id="100061" level="12" frequency="10" timeframe="60">
+    <if_matched_sid>100060</if_matched_sid>
+    <description>OWASP A07: Brute force attack confirmed - blocking IP</description>
+    <group>owasp,brute_force,attack,block</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A08 — Software Integrity Failures
+  ───────────────────────────────────── -->
+  <rule id="100070" level="12">
+    <if_group>syscheck</if_group>
+    <match>modified|added|deleted</match>
+    <field name="file">/usr/bin|/usr/sbin|/bin|/sbin|/etc/passwd|/etc/shadow|/etc/sudoers</field>
+    <description>OWASP A08: Critical system file integrity violation detected (FIM)</description>
+    <mitre>
+      <id>T1565</id>
+    </mitre>
+    <group>owasp,fim,integrity,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A09 — Logging Failures
+  ───────────────────────────────────── -->
+  <rule id="100080" level="8">
+    <match>audit.*disabled|logging.*stopped|log.*cleared|wazuh.*stopped</match>
+    <description>OWASP A09: Security logging service stopped or disabled</description>
+    <group>owasp,logging_failure,audit</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       OWASP A10 — SSRF
+  ───────────────────────────────────── -->
+  <rule id="100090" level="11">
+    <if_group>web|nginx</if_group>
+    <url>http://169\.254\.169\.254|http://metadata\.google|http://localhost|http://127\.|http://0\.0\.0\.0|file:///</url>
+    <description>OWASP A10: Server-Side Request Forgery (SSRF) attempt</description>
+    <mitre>
+      <id>T1090</id>
+    </mitre>
+    <group>owasp,ssrf,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       XSS (Cross-Site Scripting)
+  ───────────────────────────────────── -->
+  <rule id="100100" level="10">
+    <if_group>web|nginx|modsecurity</if_group>
+    <url>&lt;script|%3cscript|javascript:|onerror=|onload=|alert\(|document\.cookie|eval\(</url>
+    <description>XSS: Cross-Site Scripting attempt detected</description>
+    <mitre>
+      <id>T1059.007</id>
+    </mitre>
+    <group>owasp,xss,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       SURICATA IDS/IPS ALERTS
+  ───────────────────────────────────── -->
+  <rule id="100200" level="10">
+    <if_sid>86601</if_sid>
+    <field name="event_type">alert</field>
+    <description>Suricata IDS: Network intrusion alert - $(alert.signature)</description>
+    <group>suricata,ids,alert</group>
+  </rule>
+
+  <rule id="100201" level="14">
+    <if_sid>100200</if_sid>
+    <field name="alert.severity">1</field>
+    <description>Suricata IDS: CRITICAL severity alert - $(alert.signature)</description>
+    <group>suricata,ids,critical</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       SAMBA AD — Suspicious Activity
+  ───────────────────────────────────── -->
+  <rule id="100300" level="10">
+    <if_group>samba</if_group>
+    <match>NT_STATUS_WRONG_PASSWORD|NT_STATUS_LOGON_FAILURE</match>
+    <description>Samba AD: Authentication failure</description>
+    <group>samba,auth_failure</group>
+  </rule>
+
+  <rule id="100301" level="12" frequency="5" timeframe="60">
+    <if_matched_sid>100300</if_matched_sid>
+    <description>Samba AD: Multiple authentication failures - brute force suspected</description>
+    <group>samba,brute_force,attack</group>
+  </rule>
+
+  <rule id="100302" level="14">
+    <if_group>samba</if_group>
+    <match>privilege.*escalation|DCSync|secretsdump|mimikatz</match>
+    <description>Samba AD: Privilege escalation or credential dumping attempt</description>
+    <mitre>
+      <id>T1003</id>
+    </mitre>
+    <group>samba,privilege_escalation,attack</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       MINIO — Suspicious Access
+  ───────────────────────────────────── -->
+  <rule id="100400" level="10">
+    <if_group>minio</if_group>
+    <match>AccessDenied|InvalidAccessKeyId|SignatureDoesNotMatch</match>
+    <description>MinIO: Unauthorized access attempt to backup storage</description>
+    <group>minio,access_denied,attack</group>
+  </rule>
+
+  <rule id="100401" level="14">
+    <if_group>minio</if_group>
+    <match>DeleteBucket|DeleteObject.*wazuh|DeleteObject.*samba</match>
+    <description>MinIO: Backup deletion attempt detected!</description>
+    <group>minio,backup_deletion,critical</group>
+  </rule>
+
+  <!-- ─────────────────────────────────────
+       PORT SCANNING
+  ───────────────────────────────────── -->
+  <rule id="100500" level="10">
+    <if_sid>100200</if_sid>
+    <field name="alert.category">Attempted Information Leak</field>
+    <description>Suricata: Port scan or reconnaissance detected</description>
+    <group>suricata,recon,scan</group>
+  </rule>
+
+</group>
